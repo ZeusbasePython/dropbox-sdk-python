@@ -2,6 +2,7 @@
 # where package_data is expected to be str and not unicode.
 from __future__ import absolute_import, division, print_function
 
+import codecs
 import os
 import sys
 
@@ -17,43 +18,64 @@ except ImportError:
 from setuptools import setup
 
 dbx_mod_path = os.path.join(os.path.dirname(__file__), 'dropbox/dropbox.py')
+line = '= "UNKNOWN"'
 for line in open(dbx_mod_path):
     if line.startswith('__version__'):
         break
-version = eval(line.split('=', 1)[1])
+version = eval(line.split('=', 1)[1].strip())  # pylint: disable=eval-used
 
-install_reqs = ['urllib3',
-                'requests>=2.5.1,!=2.6.1',
-                'six>=1.3.0',
-                'typing>=3.5.2']
-assert sys.version_info >= (2, 6), "We only support Python 2.6+"
+install_reqs = [
+    'requests >= 2.5.1, != 2.6.1, !=2.16.0, !=2.16.1',
+    'six >= 1.3.0',
+    'urllib3',
+]
 
-with open('LICENSE') as f:
-  license = f.read()
+setup_requires = [
+    'pytest-runner',
+]
+
+test_reqs = [
+    'pytest',
+]
+
+# WARNING: This imposes limitations on test/requirements.txt such that the
+# full Pip syntax is not supported. See also
+# <http://stackoverflow.com/questions/14399534/>.
+with open('test/requirements.txt') as f:
+    test_reqs += f.read().splitlines()
+
+with codecs.open('README.rst', encoding='utf-8') as f:
+    README = f.read()
 
 dist = setup(
     name='dropbox',
     version=version,
-    description='Official Dropbox API Client',
-    author='Dropbox',
-    author_email='dev-platform@dropbox.com',
-    url='http://www.dropbox.com/developers',
     install_requires=install_reqs,
-    license=license,
-    zip_safe=False,
+    setup_requires=setup_requires,
+    tests_require=test_reqs,
     packages=['dropbox'],
     package_data={'dropbox': ['trusted-certs.crt']},
-    platforms=['CPython 2.6', 'CPython 2.7'],
+    zip_safe=False,
+    author_email='dev-platform@dropbox.com',
+    author='Dropbox',
+    description='Official Dropbox API Client',
+    license='MIT License',
+    long_description=README,
+    url='http://www.dropbox.com/developers',
+    # From <https://pypi.python.org/pypi?%3Aaction=list_classifiers>
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
-        'Operating System :: POSIX',
-        'Operating System :: Microsoft :: Windows',
-        'Operating System :: MacOS :: MacOS X',
-        'Programming Language :: Python :: 2.6',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Programming Language :: Python :: Implementation :: PyPy',
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
 )

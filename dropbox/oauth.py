@@ -15,16 +15,18 @@ import os
 import six
 import urllib
 
-from .session import pinned_session
+from .session import (
+    API_HOST,
+    WEB_HOST,
+    pinned_session,
+)
 
 if six.PY3:
-    url_path_quote = urllib.parse.quote
-    url_encode = urllib.parse.urlencode
+    url_path_quote = urllib.parse.quote  # pylint: disable=no-member,useless-suppression
+    url_encode = urllib.parse.urlencode  # pylint: disable=no-member,useless-suppression
 else:
-    url_path_quote = urllib.quote
-    url_encode = urllib.urlencode
-
-OAUTH_ROUTE_VERSION = '1'
+    url_path_quote = urllib.quote  # pylint: disable=no-member,useless-suppression
+    url_encode = urllib.urlencode  # pylint: disable=no-member,useless-suppression
 
 
 class OAuth2FlowNoRedirectResult(object):
@@ -37,10 +39,8 @@ class OAuth2FlowNoRedirectResult(object):
         Args:
             access_token (str): Token to be used to authenticate later
                 requests.
-            account_id (str): The Dropbox user's account ID. Please use this
-                instead of the user_id.
-            user_id (str): For backwards compatibility with API v1, please
-                avoid using this if possible.
+            account_id (str): The Dropbox user's account ID.
+            user_id (str): Deprecated (use account_id instead).
         """
         self.access_token = access_token
         self.account_id = account_id
@@ -94,8 +94,6 @@ class DropboxOAuth2FlowBase(object):
         self.locale = locale
         self.requests_session = pinned_session()
 
-        self._host = os.environ.get('DROPBOX_WEB_HOST', 'www.dropbox.com')
-
     def _get_authorize_url(self, redirect_uri, state):
         params = dict(response_type='code',
                       client_id=self.consumer_key)
@@ -104,7 +102,7 @@ class DropboxOAuth2FlowBase(object):
         if state is not None:
             params['state'] = state
 
-        return self.build_url('/oauth2/authorize', params)
+        return self.build_url('/oauth2/authorize', params, WEB_HOST)
 
     def _finish(self, code, redirect_uri):
         url = self.build_url('/oauth2/token')
@@ -123,10 +121,18 @@ class DropboxOAuth2FlowBase(object):
 
         d = resp.json()
 
+        if 'team_id' in d:
+            account_id = d['team_id']
+        else:
+            account_id = d['account_id']
+
+        access_token = d['access_token']
+        uid = d['uid']
+
         return OAuth2FlowNoRedirectResult(
-            d['access_token'],
-            d['account_id'],
-            d['uid'])
+            access_token,
+            account_id,
+            uid)
 
     def build_path(self, target, params=None):
         """Build the path component for an API URL.
@@ -153,11 +159,11 @@ class DropboxOAuth2FlowBase(object):
 
         if params:
             query_string = _params_to_urlencoded(params)
-            return "/%s%s?%s" % (OAUTH_ROUTE_VERSION, target_path, query_string)
+            return "%s?%s" % (target_path, query_string)
         else:
-            return "/%s%s" % (OAUTH_ROUTE_VERSION, target_path)
+            return target_path
 
-    def build_url(self, target, params=None):
+    def build_url(self, target, params=None, host=API_HOST):
         """Build an API URL.
 
         This method adds scheme and hostname to the path
@@ -168,7 +174,7 @@ class DropboxOAuth2FlowBase(object):
         :return: The full API URL.
         :rtype: str
         """
-        return "https://%s%s" % (self._host, self.build_path(target, params))
+        return "https://%s%s" % (host, self.build_path(target, params))
 
 
 class DropboxOAuth2FlowNoRedirect(DropboxOAuth2FlowBase):
@@ -197,7 +203,7 @@ class DropboxOAuth2FlowNoRedirect(DropboxOAuth2FlowBase):
         dbx = Dropbox(oauth_result.access_token)
     """
 
-    def __init__(self, consumer_key, consumer_secret, locale=None):
+    def __init__(self, consumer_key, consumer_secret, locale=None):  # noqa: E501; pylint: disable=useless-super-delegation
         """
         Construct an instance.
 
@@ -209,9 +215,12 @@ class DropboxOAuth2FlowNoRedirect(DropboxOAuth2FlowBase):
             error messages; this setting tells the server which locale to use.
             By default, the server uses "en_US".
         """
-        super(DropboxOAuth2FlowNoRedirect, self).__init__(consumer_key,
-                                                          consumer_secret,
-                                                          locale)
+        # pylint: disable=useless-super-delegation
+        super(DropboxOAuth2FlowNoRedirect, self).__init__(
+            consumer_key,
+            consumer_secret,
+            locale,
+        )
 
     def start(self):
         """
@@ -393,7 +402,7 @@ class DropboxOAuth2Flow(DropboxOAuth2FlowBase):
             url_state = None
         else:
             given_csrf_token = state[0:split_pos]
-            url_state = state[split_pos+1:]
+            url_state = state[split_pos + 1:]
 
         if not _safe_equals(csrf_token_from_session, given_csrf_token):
             raise CsrfException('expected %r, got %r' %
@@ -477,7 +486,8 @@ class ProviderException(Exception):
 
 
 def _safe_equals(a, b):
-    if len(a) != len(b): return False
+    if len(a) != len(b):
+        return False
     res = 0
     for ca, cb in zip(a, b):
         res |= ord(ca) ^ ord(cb)

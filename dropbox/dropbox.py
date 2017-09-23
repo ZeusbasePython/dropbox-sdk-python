@@ -4,17 +4,18 @@ __all__ = [
     'create_session',
 ]
 
-__version__ = '7.1.1'
+# This should always be 0.0.0 in master. Only update this after tagging
+# before release.
+__version__ = '0.0.0'
 
 import contextlib
 import json
 import logging
-import os
 import random
-import six
 import time
 
 import requests
+import six
 
 from . import files, stone_serializers
 from .auth import (
@@ -31,8 +32,15 @@ from .exceptions import (
     InternalServerError,
     RateLimitError,
 )
-from .session import pinned_session
-
+from .session import (
+    API_HOST,
+    API_CONTENT_HOST,
+    API_NOTIFICATION_HOST,
+    HOST_API,
+    HOST_CONTENT,
+    HOST_NOTIFY,
+    pinned_session,
+)
 
 class RouteResult(object):
     """The successful result of a call to a route."""
@@ -53,7 +61,6 @@ class RouteResult(object):
         self.obj_result = obj_result
         self.http_resp = http_resp
 
-
 class RouteErrorResult(object):
     """The error result of a call to a route."""
 
@@ -67,13 +74,11 @@ class RouteErrorResult(object):
         self.request_id = request_id
         self.obj_result = obj_result
 
-
 def create_session(max_connections=8, proxies=None):
     """
     Creates a session object that can be used by multiple :class:`Dropbox` and
     :class:`DropboxTeam` instances. This lets you share a connection pool
     amongst them, as well as proxy parameters.
-
 
     :param int max_connections: Maximum connection pool size.
     :param dict proxies: See the `requests module
@@ -89,7 +94,6 @@ def create_session(max_connections=8, proxies=None):
         session.proxies = proxies
     return session
 
-
 class _DropboxTransport(object):
     """
     Responsible for implementing the wire protocol for making requests to the
@@ -97,17 +101,6 @@ class _DropboxTransport(object):
     """
 
     _API_VERSION = '2'
-
-    _DEFAULT_DOMAIN = '.dropboxapi.com'
-
-    # Host for RPC-style routes.
-    _HOST_API = 'api'
-
-    # Host for upload and download-style routes.
-    _HOST_CONTENT = 'content'
-
-    # Host for longpoll routes.
-    _HOST_NOTIFY = 'notify'
 
     # Download style means that the route argument goes in a Dropbox-API-Arg
     # header, and the result comes back in a Dropbox-API-Result header. The
@@ -183,16 +176,9 @@ class _DropboxTransport(object):
 
         self._logger = logging.getLogger('dropbox')
 
-        self._domain = os.environ.get('DROPBOX_DOMAIN', Dropbox._DEFAULT_DOMAIN)
-        self._api_hostname = os.environ.get(
-            'DROPBOX_API_HOST', 'api' + self._domain)
-        self._api_content_hostname = os.environ.get(
-            'DROPBOX_API_CONTENT_HOST', 'content' + self._domain)
-        self._api_notify_hostname = os.environ.get(
-            'DROPBOX_API_NOTIFY_HOST', 'notify' + self._domain)
-        self._host_map = {self._HOST_API: self._api_hostname,
-                          self._HOST_CONTENT: self._api_content_hostname,
-                          self._HOST_NOTIFY: self._api_notify_hostname}
+        self._host_map = {HOST_API: API_HOST,
+                          HOST_CONTENT: API_CONTENT_HOST,
+                          HOST_NOTIFY: API_NOTIFICATION_HOST}
 
         self._timeout = timeout
 
@@ -229,7 +215,6 @@ class _DropboxTransport(object):
         serialized_arg = stone_serializers.json_encode(route.arg_type,
                                                        request_arg)
 
-
         if (timeout is None and
                 route == files.list_folder_longpoll):
             # The client normally sends a timeout value to the
@@ -256,11 +241,10 @@ class _DropboxTransport(object):
             obj = decoded_obj_result['error']
             user_message = decoded_obj_result.get('user_message')
             user_message_text = user_message and user_message.get('text')
-            user_message_locale =  user_message and user_message.get('locale')
+            user_message_locale = user_message and user_message.get('locale')
         else:
             raise AssertionError('Expected RouteResult or RouteErrorResult, '
                                  'but res is %s' % type(res))
-
 
         deserialized_result = stone_serializers.json_compat_obj_decode(
             returned_data_type, obj, strict=False)
@@ -389,7 +373,7 @@ class _DropboxTransport(object):
         url = self._get_route_url(fq_hostname, func_name)
 
         headers = {'User-Agent': self._user_agent}
-        if host != self._HOST_NOTIFY:
+        if host != HOST_NOTIFY:
             headers['Authorization'] = 'Bearer %s' % self._oauth2_access_token
             if self._headers:
                 headers.update(self._headers)
@@ -495,7 +479,6 @@ class _DropboxTransport(object):
                 for c in http_resp.iter_content(chunksize):
                     f.write(c)
 
-
 class Dropbox(_DropboxTransport, DropboxBase):
     """
     Use this class to make requests to the Dropbox API using a user's access
@@ -503,7 +486,6 @@ class Dropbox(_DropboxTransport, DropboxBase):
     Dropbox.
     """
     pass
-
 
 class DropboxTeam(_DropboxTransport, DropboxTeamBase):
     """

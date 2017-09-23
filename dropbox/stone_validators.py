@@ -18,12 +18,16 @@ import math
 import numbers
 import re
 import six
-from typing import Optional
 
+_MYPY = False
+if _MYPY:
+    import typing  # noqa: F401 # pylint: disable=import-error,unused-import,useless-suppression
+
+# See <http://python3porting.com/differences.html#buffer>
 if six.PY3:
-    _binary_types = (bytes, memoryview)
+    _binary_types = (bytes, memoryview)  # noqa: E501,F821 # pylint: disable=undefined-variable,useless-suppression
 else:
-    _binary_types = (bytes, buffer)
+    _binary_types = (bytes, buffer)  # noqa: E501,F821 # pylint: disable=undefined-variable,useless-suppression
 
 
 class ValidationError(Exception):
@@ -106,6 +110,7 @@ class Validator(object):
 
 class Primitive(Validator):
     """A basic type that is defined by Stone."""
+    # pylint: disable=abstract-method
     pass
 
 
@@ -122,8 +127,8 @@ class Integer(Primitive):
     Do not use this class directly. Extend it and specify a 'minimum' and
     'maximum' value as class variables for a more restrictive integer range.
     """
-    minimum = None  # type: Optional[numbers.Integral]
-    maximum = None  # type: Optional[numbers.Integral]
+    minimum = None  # type: typing.Optional[int]
+    maximum = None  # type: typing.Optional[int]
 
     def __init__(self, min_value=None, max_value=None):
         """
@@ -184,8 +189,8 @@ class Real(Primitive):
     and 'maximum' value to enforce a range that's a subset of the Python float
     implementation. Python floats are doubles.
     """
-    minimum = None  # type: Optional[numbers.Real]
-    maximum = None  # type: Optional[numbers.Real]
+    minimum = None  # type: typing.Optional[float]
+    maximum = None  # type: typing.Optional[float]
 
     def __init__(self, min_value=None, max_value=None):
         """
@@ -347,18 +352,18 @@ class Timestamp(Primitive):
     since a native Python datetime object is preferred. The format, however,
     can and should be used by serializers."""
 
-    def __init__(self, format):
-        """format must be composed of format codes that the C standard (1989)
+    def __init__(self, fmt):
+        """fmt must be composed of format codes that the C standard (1989)
         supports, most notably in its strftime() function."""
-        assert isinstance(format, six.text_type), 'format must be a string'
-        self.format = format
+        assert isinstance(fmt, six.text_type), 'format must be a string'
+        self.format = fmt
 
     def validate(self, val):
         if not isinstance(val, datetime.datetime):
             raise ValidationError('expected timestamp, got %s'
                                   % generic_type_name(val))
         elif val.tzinfo is not None and \
-                        val.tzinfo.utcoffset(val).total_seconds() != 0:
+                val.tzinfo.utcoffset(val).total_seconds() != 0:
             raise ValidationError('timestamp should have either a UTC '
                                   'timezone or none set at all')
         return val
@@ -367,6 +372,7 @@ class Timestamp(Primitive):
 class Composite(Validator):
     """Validator for a type that builds on other primitive and composite
     types."""
+    # pylint: disable=abstract-method
     pass
 
 
@@ -402,6 +408,26 @@ class List(Composite):
         return [self.item_validator.validate(item) for item in val]
 
 
+class Map(Composite):
+    """Assumes map keys and values are homogeneous with respect to types."""
+
+    def __init__(self, key_validator, value_validator):
+        """
+        Every Map key/value pair will be validated with item_validator.
+        key validators must be a subclass of a String validator
+        """
+        self.key_validator = key_validator
+        self.value_validator = value_validator
+
+    def validate(self, val):
+        if not isinstance(val, dict):
+            raise ValidationError('%r is not a valid dict' % val)
+        return {
+            self.key_validator.validate(key):
+                self.value_validator.validate(value) for key, value in val.items()
+        }
+
+
 class Struct(Composite):
 
     def __init__(self, definition):
@@ -417,6 +443,7 @@ class Struct(Composite):
                     field_name: Name of the field (str).
                     validator: Validator object.
         """
+        super(Struct, self).__init__()
         self.definition = definition
 
     def validate(self, val):
@@ -471,7 +498,9 @@ class StructTree(Struct):
     struct, but does not do any validation specific to the subtype.
     """
 
-    def __init__(self, definition):
+    # See PyCQA/pylint#1043 for why this is disabled; this should show up
+    # as a usless-suppression (and can be removed) once a fix is released
+    def __init__(self, definition):  # pylint: disable=useless-super-delegation
         super(StructTree, self).__init__(definition)
 
 
